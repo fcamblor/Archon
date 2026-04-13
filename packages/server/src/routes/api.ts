@@ -70,7 +70,10 @@ import * as workflowDb from '@archon/core/db/workflows';
 import * as workflowEventDb from '@archon/core/db/workflow-events';
 import * as messageDb from '@archon/core/db/messages';
 import { errorSchema } from './schemas/common.schemas';
-import { updateCheckResponseSchema } from './schemas/system.schemas';
+import {
+  updateCheckResponseSchema,
+  ccstatuslineUsagesResponseSchema,
+} from './schemas/system.schemas';
 import {
   workflowListResponseSchema,
   validateWorkflowBodySchema,
@@ -869,6 +872,21 @@ const getUpdateCheckRoute = createRoute({
       },
       description: 'Update check result',
     },
+  },
+});
+
+const getCcstatuslineUsagesRoute = createRoute({
+  method: 'get',
+  path: '/api/ccstatusline/usages',
+  tags: ['System'],
+  summary: 'Get ccstatusline usage data',
+  responses: {
+    200: {
+      content: { 'application/json': { schema: ccstatuslineUsagesResponseSchema } },
+      description: 'Usage data from ccstatusline cache',
+    },
+    404: jsonError('File not found'),
+    500: jsonError('Server error'),
   },
 });
 
@@ -2671,5 +2689,27 @@ export function registerApiRoutes(
     if (!BUNDLED_IS_BINARY) return c.json(noUpdate);
     const result = await checkForUpdate(appVersion);
     return c.json(result ?? noUpdate);
+  });
+
+  registerOpenApiRoute(getCcstatuslineUsagesRoute, async c => {
+    const homeDir = process.env.HOME ?? process.env.USERPROFILE ?? '';
+    const filePath = join(homeDir, '.cache', 'ccstatusline', 'usages.json');
+    let content: string;
+    try {
+      content = await readFile(filePath, 'utf-8');
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+        return apiError(c, 404, 'ccstatusline usage file not found');
+      }
+      getLog().error({ err }, 'ccstatusline.read_failed');
+      return apiError(c, 500, 'Failed to read ccstatusline usage data');
+    }
+    try {
+      const data = JSON.parse(content) as unknown;
+      return c.json(data);
+    } catch (err) {
+      getLog().error({ err }, 'ccstatusline.parse_failed');
+      return apiError(c, 500, 'Failed to parse ccstatusline usage data');
+    }
   });
 }
