@@ -185,6 +185,7 @@ function makeApp(): Hono {
       await fn();
       return { status: 'started' };
     }),
+    getAbortSignal: mock((_id: string) => undefined),
     getStats: mockGetStats,
   } as unknown as ConversationLockManager;
   registerApiRoutes(app, mockWebAdapter, mockLockManager);

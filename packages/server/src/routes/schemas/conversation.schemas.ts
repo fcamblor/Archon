@@ -106,3 +106,11 @@ export const dispatchResponseSchema = z
     status: z.string(),
   })
   .openapi('DispatchResponse');
+
+/** POST /api/conversations/:id/cancel response. */
+export const cancelConversationResponseSchema = z
+  .object({
+    success: z.boolean(),
+    message: z.string(),
+  })
+  .openapi('CancelConversationResponse');

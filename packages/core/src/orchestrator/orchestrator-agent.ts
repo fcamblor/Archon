@@ -500,8 +500,14 @@ export async function handleMessage(
   message: string,
   context?: HandleMessageContext
 ): Promise<void> {
-  const { issueContext, threadContext, parentConversationId, isolationHints, attachedFiles } =
-    context ?? {};
+  const {
+    issueContext,
+    threadContext,
+    parentConversationId,
+    isolationHints,
+    attachedFiles,
+    abortSignal,
+  } = context ?? {};
   try {
     getLog().debug({ conversationId }, 'orchestrator_message_received');
 
@@ -762,6 +768,7 @@ export async function handleMessage(
       ...(conversation.ai_assistant_type === 'claude' && config.assistants.claude.settingSources
         ? { settingSources: config.assistants.claude.settingSources }
         : {}),
+      ...(abortSignal ? { abortSignal } : {}),
     };
 
     const mode = platform.getStreamingMode();
