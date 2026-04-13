@@ -64,6 +64,7 @@ curl http://localhost:3090/api/health
 | DELETE | `/api/conversations/{id}` | Soft-delete a conversation |
 | GET | `/api/conversations/{id}/messages` | List messages in a conversation |
 | POST | `/api/conversations/{id}/message` | Send a message to a conversation |
+| POST | `/api/conversations/{id}/cancel` | Cancel the in-progress AI response |
 
 ### List Conversations
 
@@ -112,6 +113,14 @@ curl http://localhost:3090/api/conversations/{id}/messages
 Query parameters:
 - `limit` (optional) -- Number of messages to return
 - `before` (optional) -- Cursor for pagination
+
+### Cancel an In-Progress Response
+
+```bash
+curl -X POST http://localhost:3090/api/conversations/{id}/cancel
+```
+
+Cancels the active AI response for the conversation. Returns 404 if no response is currently in progress. On success, emits a `conversation_cancelled` SSE event so connected clients can update their UI immediately.
 
 ### Update a Conversation
 

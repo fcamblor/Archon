@@ -180,6 +180,49 @@ describe('ConversationLockManager', () => {
     expect(manager.getStats().active).toBe(0); // Cleaned up properly
   });
 
+  describe('cancel / getAbortSignal', () => {
+    test('getAbortSignal returns undefined when conversation is not active', () => {
+      const manager = new ConversationLockManager(10);
+      expect(manager.getAbortSignal('nonexistent')).toBeUndefined();
+    });
+
+    test('cancel returns false when conversation is not active', () => {
+      const manager = new ConversationLockManager(10);
+      expect(manager.cancel('nonexistent')).toBe(false);
+    });
+
+    test('cancel returns true and aborts signal when conversation is active', async () => {
+      const manager = new ConversationLockManager(10);
+      void manager.acquireLock('conv-y', async () => {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      });
+      await new Promise(resolve => setTimeout(resolve, 10));
+      const result = manager.cancel('conv-y');
+      expect(result).toBe(true);
+      expect(manager.getAbortSignal('conv-y')?.aborted).toBe(true);
+      await new Promise(resolve => setTimeout(resolve, 120));
+    });
+
+    test('cancel returns false when already aborted (idempotency)', async () => {
+      const manager = new ConversationLockManager(10);
+      void manager.acquireLock('conv-z', async () => {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      });
+      await new Promise(resolve => setTimeout(resolve, 10));
+      manager.cancel('conv-z');
+      expect(manager.cancel('conv-z')).toBe(false);
+      await new Promise(resolve => setTimeout(resolve, 120));
+    });
+
+    test('AbortController is cleaned up after handler completes', async () => {
+      const manager = new ConversationLockManager(10);
+      await manager.acquireLock('conv-cleanup', async () => {});
+      await new Promise(resolve => setTimeout(resolve, 20));
+      expect(manager.getAbortSignal('conv-cleanup')).toBeUndefined();
+      expect(manager.cancel('conv-cleanup')).toBe(false);
+    });
+  });
+
   test('stats show correct active conversation IDs', async () => {
     const manager = new ConversationLockManager(10);
 

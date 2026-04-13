@@ -62,7 +62,7 @@ export class ConversationLockManager {
 
   /**
    * Cancel the active handler for a conversation by aborting its AbortController.
-   * Returns true if cancellation was triggered, false if conversation was not active.
+   * Returns true if cancellation was triggered, false if conversation was not active or was already cancelled.
    */
   cancel(conversationId: string): boolean {
     const controller = this.abortControllers.get(conversationId);
