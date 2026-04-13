@@ -774,6 +774,7 @@ Pattern: Use `classifyIsolationError()` (from `@archon/isolation`) to map git er
 
 **System:**
 - `GET /api/update-check` - Check for available updates; returns `{ updateAvailable, currentVersion, latestVersion, releaseUrl }`; skips GitHub API call for non-binary builds
+- `GET /api/ccstatusline/usages` - Get Claude AI usage data from ccstatusline cache (`~/.cache/ccstatusline/usages.json`); returns 404 when file absent
 
 **OpenAPI Spec:**
 - `GET /api/openapi.json` - Generated OpenAPI 3.0 spec for all Zod-validated routes
