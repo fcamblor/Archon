@@ -1,8 +1,9 @@
 import { NavLink, Link } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { LayoutDashboard, MessageSquare, Workflow, Settings } from 'lucide-react';
-import { listDashboardRuns, getUpdateCheck } from '@/lib/api';
+import { listDashboardRuns, getUpdateCheck, getCcstatuslineUsages } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { UsageStatusIndicator } from './UsageStatusIndicator';
 
 const tabs = [
   { to: '/chat', end: false, icon: MessageSquare, label: 'Chat' },
@@ -27,6 +28,14 @@ export function TopNav(): React.ReactElement {
     queryFn: getUpdateCheck,
     staleTime: 60 * 60 * 1000,
     refetchInterval: 60 * 60 * 1000,
+    retry: false,
+  });
+
+  const { data: usageData } = useQuery({
+    queryKey: ['ccstatusline-usages'],
+    queryFn: getCcstatuslineUsages,
+    staleTime: 40_000,
+    refetchInterval: 40_000,
     retry: false,
   });
 
@@ -66,7 +75,13 @@ export function TopNav(): React.ReactElement {
           )}
         </NavLink>
       ))}
-      <span className="ml-auto text-xs text-text-secondary">
+      <span className="ml-auto flex items-center gap-3 text-xs text-text-secondary">
+        {usageData && usageData.usages.length > 0 && (
+          <UsageStatusIndicator
+            usages={usageData.usages}
+            activeEmail={usageData.activeEmail ?? null}
+          />
+        )}
         v{import.meta.env.VITE_APP_VERSION as string}
         {updateCheck?.updateAvailable && updateCheck.releaseUrl && (
           <a

@@ -43,6 +43,26 @@ export interface CodebaseResponse {
   updated_at: string;
 }
 
+export interface CcstatuslineAccountUsage {
+  sessionUsage: number;
+  sessionResetAt: string;
+  weeklyUsage: number;
+  weeklyResetAt: string;
+  extraUsageEnabled: boolean;
+}
+
+export interface CcstatuslineAccount {
+  email: string;
+  lastUsageAcquiredOn: string;
+  usage: CcstatuslineAccountUsage | null;
+  lastError: string | null;
+}
+
+export interface CcstatuslineUsagesResponse {
+  usages: CcstatuslineAccount[];
+  activeEmail?: string | null;
+}
+
 export interface HealthResponse {
   status: string;
   adapter: string;
@@ -523,4 +543,8 @@ export type UpdateCheckResult = components['schemas']['UpdateCheckResponse'];
 
 export async function getUpdateCheck(): Promise<UpdateCheckResult> {
   return fetchJSON<UpdateCheckResult>('/api/update-check');
+}
+
+export async function getCcstatuslineUsages(): Promise<CcstatuslineUsagesResponse> {
+  return fetchJSON<CcstatuslineUsagesResponse>('/api/ccstatusline/usages');
 }
