@@ -62,6 +62,7 @@ import { validationErrorHook } from './routes/openapi-defaults';
 import { TelegramAdapter, GitHubAdapter, DiscordAdapter, SlackAdapter } from '@archon/adapters';
 import { GiteaAdapter } from '@archon/adapters/community/forge/gitea';
 import { GitLabAdapter } from '@archon/adapters/community/forge/gitlab';
+import { startUsageFetcher, stopUsageFetcher } from './usage-fetcher';
 import { WebAdapter } from './adapters/web';
 import { MessagePersistence } from './adapters/web/persistence';
 import { SSETransport } from './adapters/web/transport';
@@ -206,6 +207,9 @@ export async function startServer(opts: ServerOptions = {}): Promise<void> {
 
   // Start cleanup scheduler
   startCleanupScheduler();
+
+  // Start Claude Code usage fetcher (writes ~/.cache/ccstatusline/usages.json)
+  startUsageFetcher();
 
   // Note: orphaned-run cleanup intentionally NOT called at server startup.
   // Running it here killed parallel workflow runs from other processes
@@ -619,6 +623,7 @@ export async function startServer(opts: ServerOptions = {}): Promise<void> {
   const shutdown = (): void => {
     getLog().info('server_shutting_down');
     stopCleanupScheduler();
+    stopUsageFetcher();
     persistence.stopPeriodicFlush();
 
     // Flush all buffered messages before stopping adapters

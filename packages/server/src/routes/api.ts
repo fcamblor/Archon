@@ -2599,7 +2599,7 @@ export function registerApiRoutes(
       // ignore — activeEmail stays null if file missing or malformed
     }
 
-    const filePath = join(homeDir, '.cache', 'ccstatusline', 'usages.json');
+    const filePath = join(homeDir, '.cache', 'archon', 'usages.json');
     let content: string;
     try {
       content = await readFile(filePath, 'utf-8');
