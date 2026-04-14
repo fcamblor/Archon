@@ -1397,18 +1397,26 @@ export function registerApiRoutes(
       if (!cancelled) {
         return apiError(c, 404, 'No active processing for this conversation');
       }
-      // Emit cancellation SSE event so the frontend can update UI immediately
-      await webAdapter.emitSSE(
-        conversationId,
-        JSON.stringify({
-          type: 'conversation_cancelled',
+      // Best-effort SSE notification — failure here doesn't undo the cancellation
+      try {
+        await webAdapter.emitSSE(
           conversationId,
-          timestamp: Date.now(),
-        })
-      );
+          JSON.stringify({
+            type: 'conversation_cancelled',
+            conversationId,
+            timestamp: Date.now(),
+          })
+        );
+      } catch (sseError) {
+        getLog().warn({ err: sseError, conversationId }, 'cancel_sse_emit_failed');
+        // UI will still unlock via the handler's finally block (conversation_lock:false)
+      }
       return c.json({ success: true, message: 'Cancellation requested' });
     } catch (error) {
-      getLog().error({ err: error }, 'cancel_conversation_failed');
+      getLog().error(
+        { err: error, conversationId: c.req.param('id') ?? '' },
+        'cancel_conversation_failed'
+      );
       return apiError(c, 500, 'Failed to cancel conversation');
     }
   });

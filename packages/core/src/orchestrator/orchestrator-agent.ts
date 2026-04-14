@@ -834,6 +834,11 @@ export async function handleMessage(
     getLog().debug({ conversationId }, 'orchestrator_message_completed');
   } catch (error) {
     const err = toError(error);
+    // Intentional cancellation — do not surface as an error
+    if (err.name === 'AbortError' || err.message === 'Query aborted') {
+      getLog().info({ conversationId }, 'orchestrator_message_aborted');
+      return;
+    }
     getLog().error({ err, conversationId }, 'orchestrator_message_failed');
     const userMessage = classifyAndFormatError(err);
     try {

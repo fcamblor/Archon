@@ -193,6 +193,7 @@ Events streamed over SSE include:
 | `dag_node` | DAG node progress update |
 | `workflow_artifact` | Artifact produced by a workflow |
 | `conversation_lock` | Lock/unlock indicator |
+| `conversation_cancelled` | AI response was cancelled via the Stop Generating button |
 | `session_info` | Session metadata |
 | `error` | Error message |
 | `heartbeat` | Keep-alive signal |

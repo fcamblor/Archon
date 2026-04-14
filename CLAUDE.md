@@ -768,6 +768,9 @@ Pattern: Use `classifyIsolationError()` (from `@archon/isolation`) to map git er
 - `PUT /api/workflows/:name` - Save (create or update) a workflow YAML; body: `{ definition: object }`; validates before writing; requires `?cwd=` or registered codebase
 - `DELETE /api/workflows/:name` - Delete a user-defined workflow; bundled defaults cannot be deleted
 
+**Conversations:**
+- `POST /api/conversations/:id/cancel` - Cancel the in-progress AI response; emits `conversation_cancelled` SSE event; returns 404 if no active processing
+
 **Workflow Run Lifecycle:**
 - `POST /api/workflows/runs/{runId}/resume` - Mark a failed run as ready for auto-resume on next invocation
 - `POST /api/workflows/runs/{runId}/abandon` - Abandon a non-terminal run (marks as cancelled)
