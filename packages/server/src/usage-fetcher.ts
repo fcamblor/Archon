@@ -50,11 +50,7 @@ async function getActiveEmail(): Promise<string | null> {
   try {
     const raw = await readFile(join(homeDir(), '.claude.json'), 'utf-8');
     const parsed = JSON.parse(raw) as unknown;
-    if (
-      typeof parsed === 'object' &&
-      parsed !== null &&
-      'oauthAccount' in parsed
-    ) {
+    if (typeof parsed === 'object' && parsed !== null && 'oauthAccount' in parsed) {
       const oauth = (parsed as { oauthAccount?: { emailAddress?: string } }).oauthAccount;
       return oauth?.emailAddress ?? null;
     }
@@ -67,31 +63,23 @@ async function getActiveEmail(): Promise<string | null> {
 /** macOS Keychain lookup — resolves to the token string or null. */
 function readKeychainToken(): Promise<string | null> {
   return new Promise(resolve => {
-    exec(
-      "security find-generic-password -s 'Claude Code-credentials' -w",
-      (err, stdout) => {
-        if (err || !stdout.trim()) {
-          resolve(null);
-          return;
-        }
-        try {
-          const creds = JSON.parse(stdout.trim()) as unknown;
-          if (
-            typeof creds === 'object' &&
-            creds !== null &&
-            'claudeAiOauth' in creds
-          ) {
-            const oauthObj = (creds as { claudeAiOauth?: { accessToken?: string } })
-              .claudeAiOauth;
-            resolve(oauthObj?.accessToken ?? null);
-          } else {
-            resolve(null);
-          }
-        } catch {
-          resolve(null);
-        }
+    exec("security find-generic-password -s 'Claude Code-credentials' -w", (err, stdout) => {
+      if (err || !stdout.trim()) {
+        resolve(null);
+        return;
       }
-    );
+      try {
+        const creds = JSON.parse(stdout.trim()) as unknown;
+        if (typeof creds === 'object' && creds !== null && 'claudeAiOauth' in creds) {
+          const oauthObj = (creds as { claudeAiOauth?: { accessToken?: string } }).claudeAiOauth;
+          resolve(oauthObj?.accessToken ?? null);
+        } else {
+          resolve(null);
+        }
+      } catch {
+        resolve(null);
+      }
+    });
   });
 }
 
@@ -172,7 +160,9 @@ interface AnthropicUsageResponse {
 
 async function fetchUsageFromApi(token: string): Promise<AccountUsage> {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  const timeoutId = setTimeout(() => {
+    controller.abort();
+  }, FETCH_TIMEOUT_MS);
 
   try {
     const res = await fetch(ANTHROPIC_USAGE_URL, {

@@ -255,7 +255,7 @@ export async function startServer(opts: ServerOptions = {}): Promise<void> {
   // Start cleanup scheduler
   startCleanupScheduler();
 
-  // Start Claude Code usage fetcher (writes ~/.cache/ccstatusline/usages.json)
+  // Start Claude Code usage fetcher (writes ~/.cache/archon/usages.json)
   startUsageFetcher();
 
   // Mark workflow runs orphaned by previous process termination as failed
