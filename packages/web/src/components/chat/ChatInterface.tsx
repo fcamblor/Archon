@@ -13,6 +13,7 @@ import {
 } from '@/stores/workflow-store';
 import {
   sendMessage as apiSendMessage,
+  cancelConversation,
   listConversations,
   listCodebases,
   getMessages,
@@ -605,6 +606,22 @@ export function ChatInterface({ conversationId }: ChatInterfaceProps): React.Rea
     [onError]
   );
 
+  const onConversationCancelled = useCallback((): void => {
+    setMessages(prev =>
+      prev.map(msg =>
+        msg.isStreaming
+          ? {
+              ...msg,
+              isStreaming: false,
+              content:
+                msg.content +
+                (msg.content ? '\n\n---\n*Response interrupted*' : '*Response interrupted*'),
+            }
+          : msg
+      )
+    );
+  }, []);
+
   const onSystemStatus = useCallback((content: string): void => {
     setMessages(prev => [
       ...prev,
@@ -628,6 +645,7 @@ export function ChatInterface({ conversationId }: ChatInterfaceProps): React.Rea
     onWarning,
     onRetract,
     onSystemStatus,
+    onConversationCancelled,
     ...workflowSSEHandlers,
   });
 
@@ -745,6 +763,14 @@ export function ChatInterface({ conversationId }: ChatInterfaceProps): React.Rea
 
   const isStreaming = messages.some(m => m.isStreaming);
 
+  const handleCancel = useCallback(async (): Promise<void> => {
+    try {
+      await cancelConversation(conversationId);
+    } catch (error) {
+      console.error('[Chat] Failed to cancel', { error });
+    }
+  }, [conversationId]);
+
   return (
     <div className="flex flex-1 flex-col overflow-hidden min-h-0">
       <Header
@@ -779,6 +805,8 @@ export function ChatInterface({ conversationId }: ChatInterfaceProps): React.Rea
       <MessageInput
         ref={inputRef}
         onSend={handleSend}
+        onCancel={handleCancel}
+        isProcessing={sending || locked || isStreaming}
         disabled={
           sending ||
           locked ||

@@ -170,6 +170,14 @@ export async function sendMessage(
   return fetchJSON(url, { method: 'POST', body: form });
 }
 
+export async function cancelConversation(
+  conversationId: string
+): Promise<{ success: boolean; message: string }> {
+  return fetchJSON(`/api/conversations/${encodeURIComponent(conversationId)}/cancel`, {
+    method: 'POST',
+  });
+}
+
 // Messages
 export interface MessageResponse {
   id: string;

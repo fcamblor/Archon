@@ -310,6 +310,7 @@ describe('POST /api/conversations with message (atomic create+send)', () => {
       await fn();
       return { status: 'started' as const };
     }),
+    getAbortSignal: mock((_id: string) => undefined),
   } as unknown as ConversationLockManager;
 
   const mockWebAdapter = {

@@ -101,6 +101,7 @@ import {
   messageListResponseSchema,
   listMessagesQuerySchema,
   dispatchResponseSchema,
+  cancelConversationResponseSchema,
 } from './schemas/conversation.schemas';
 import {
   codebaseListResponseSchema,
@@ -403,6 +404,22 @@ const sendMessageRoute = createRoute({
       description: 'Accepted',
     },
     400: jsonError('Bad request'),
+    500: jsonError('Server error'),
+  },
+});
+
+const cancelConversationRoute = createRoute({
+  method: 'post',
+  path: '/api/conversations/{id}/cancel',
+  tags: ['Conversations'],
+  summary: 'Cancel an in-progress AI response',
+  request: { params: conversationIdParamsSchema },
+  responses: {
+    200: {
+      content: { 'application/json': { schema: cancelConversationResponseSchema } },
+      description: 'Cancelled',
+    },
+    404: jsonError('Conversation not active'),
     500: jsonError('Server error'),
   },
 });
@@ -972,9 +989,12 @@ export function registerApiRoutes(
       // Fire-and-forget — if no SSE stream is connected yet, the event is buffered.
       webAdapter.emitLockEvent(conversationId, true);
       try {
+        // Pass the lock manager's abort signal so the AI subprocess can be cancelled
+        const abortSignal = lockManager.getAbortSignal(conversationId);
         await handleMessage(webAdapter, conversationId, message, {
           isolationHints: { workflowType: 'thread', workflowId: conversationId },
           ...extraContext,
+          ...(abortSignal ? { abortSignal } : {}),
         });
       } catch (error) {
         getLog().error({ err: error, conversationId }, 'handle_message_failed');
@@ -1367,6 +1387,30 @@ export function registerApiRoutes(
       filesToCleanup
     );
     return c.json(result);
+  });
+
+  // POST /api/conversations/:id/cancel - Cancel an in-progress AI response
+  registerOpenApiRoute(cancelConversationRoute, async c => {
+    try {
+      const conversationId = c.req.param('id') ?? '';
+      const cancelled = lockManager.cancel(conversationId);
+      if (!cancelled) {
+        return apiError(c, 404, 'No active processing for this conversation');
+      }
+      // Emit cancellation SSE event so the frontend can update UI immediately
+      await webAdapter.emitSSE(
+        conversationId,
+        JSON.stringify({
+          type: 'conversation_cancelled',
+          conversationId,
+          timestamp: Date.now(),
+        })
+      );
+      return c.json({ success: true, message: 'Cancellation requested' });
+    } catch (error) {
+      getLog().error({ err: error }, 'cancel_conversation_failed');
+      return apiError(c, 500, 'Failed to cancel conversation');
+    }
   });
 
   // GET /api/stream/__dashboard__ — multiplexed dashboard SSE (all workflow events)

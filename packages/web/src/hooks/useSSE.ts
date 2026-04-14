@@ -44,6 +44,7 @@ interface SSEHandlers {
   onWarning?: (message: string) => void;
   onRetract?: () => void;
   onSystemStatus?: (content: string) => void;
+  onConversationCancelled?: () => void;
 }
 
 export function useSSE(
@@ -223,6 +224,18 @@ export function useSSE(
             textBufferRef.current = '';
             pendingWorkflowResultRef.current = undefined;
             h.onRetract?.();
+            break;
+          case 'conversation_cancelled':
+            // Flush any buffered text so partial response is preserved
+            if (textBufferRef.current) {
+              if (flushTimerRef.current) {
+                clearTimeout(flushTimerRef.current);
+                flushTimerRef.current = null;
+              }
+              flushText();
+            }
+            h.onConversationCancelled?.();
+            h.onLockChange(false);
             break;
           case 'heartbeat':
             break;
