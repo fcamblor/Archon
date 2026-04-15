@@ -350,7 +350,7 @@ curl -X PATCH http://localhost:3090/api/config/assistants \
 
 Returns `{ updateAvailable, currentVersion, latestVersion, releaseUrl }`. For non-binary (source) builds, always returns `updateAvailable: false` without making external requests.
 
-`GET /api/ccstatusline/usages` reads `~/.cache/ccstatusline/usages.json` written by the [ccstatusline](https://github.com/someorg/ccstatusline) tool. Returns `{ usages: [...] }` with per-account Claude usage data. Returns 404 when the file does not exist (e.g., ccstatusline not installed or not yet run), 500 if the file cannot be read or has an unexpected format.
+`GET /api/ccstatusline/usages` reads `~/.cache/archon/usages.json` populated by Archon's built-in background usage fetcher. Returns `{ usages: [...] }` with per-account Claude usage data. Returns 404 when the file does not exist (e.g., server just started or no active Claude account detected), 500 if the file cannot be read or has an unexpected format.
 
 ---
 
