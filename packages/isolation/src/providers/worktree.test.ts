@@ -1862,6 +1862,78 @@ describe('WorktreeProvider', () => {
     });
   });
 
+  describe('file linking', () => {
+    let copyWorktreeFilesSpy: Mock<typeof worktreeCopy.copyWorktreeFiles>;
+    let linkWorktreeFilesSpy: Mock<typeof worktreeCopy.linkWorktreeFiles>;
+
+    const baseRequest: IsolationRequest = {
+      codebaseId: 'cb-123',
+      canonicalRepoPath: '/.archon/workspaces/owner/repo',
+      workflowType: 'issue',
+      identifier: '42',
+    };
+
+    beforeEach(() => {
+      copyWorktreeFilesSpy = spyOn(worktreeCopy, 'copyWorktreeFiles');
+      linkWorktreeFilesSpy = spyOn(worktreeCopy, 'linkWorktreeFiles');
+
+      copyWorktreeFilesSpy.mockResolvedValue([]);
+      linkWorktreeFilesSpy.mockResolvedValue([]);
+    });
+
+    afterEach(() => {
+      copyWorktreeFilesSpy.mockRestore();
+      linkWorktreeFilesSpy.mockRestore();
+    });
+
+    test('calls linkWorktreeFiles with configured linkFiles', async () => {
+      const configLoader: RepoConfigLoader = async () => ({
+        baseBranch: 'main',
+        linkFiles: ['.serena/cache', '.entire/metadata'],
+      });
+      provider = new WorktreeProvider(configLoader);
+
+      linkWorktreeFilesSpy.mockResolvedValue([
+        { source: '.serena/cache', destination: '.serena/cache' },
+        { source: '.entire/metadata', destination: '.entire/metadata' },
+      ]);
+
+      await provider.create(baseRequest);
+
+      expect(linkWorktreeFilesSpy).toHaveBeenCalledWith(
+        '/.archon/workspaces/owner/repo',
+        expect.stringContaining('issue-42'),
+        ['.serena/cache', '.entire/metadata']
+      );
+    });
+
+    test('does not fail worktree creation if file linking fails', async () => {
+      const configLoader: RepoConfigLoader = async () => ({
+        baseBranch: 'main',
+        linkFiles: ['.serena/cache'],
+      });
+      provider = new WorktreeProvider(configLoader);
+
+      linkWorktreeFilesSpy.mockRejectedValue(new Error('Link failed'));
+
+      // Should not throw — same resilience as copyFiles
+      const env = await provider.create(baseRequest);
+      expect(env.workingPath).toContain('issue-42');
+    });
+
+    test('skips linkWorktreeFiles when linkFiles is empty', async () => {
+      const configLoader: RepoConfigLoader = async () => ({
+        baseBranch: 'main',
+        linkFiles: [],
+      });
+      provider = new WorktreeProvider(configLoader);
+
+      await provider.create(baseRequest);
+
+      expect(linkWorktreeFilesSpy).not.toHaveBeenCalled();
+    });
+  });
+
   describe('orphan directory handling', () => {
     let accessSpy: Mock<typeof import('fs/promises').access>;
     let rmSpy: Mock<typeof import('fs/promises').rm>;

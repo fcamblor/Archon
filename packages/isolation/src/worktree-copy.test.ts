@@ -387,6 +387,14 @@ describe('worktree-link', () => {
       expect(result).toEqual({ source: '.entire/metadata/', destination: '.entire/metadata/' });
     });
 
+    test('treats arrow literally (no rename syntax)', () => {
+      const result = parseLinkFileEntry('.env.example -> .env');
+      expect(result).toEqual({
+        source: '.env.example -> .env',
+        destination: '.env.example -> .env',
+      });
+    });
+
     test('throws on empty string', () => {
       expect(() => parseLinkFileEntry('')).toThrow('Link entry cannot be empty');
     });
@@ -435,7 +443,8 @@ describe('worktree-link', () => {
       expect(mkdirSpy).toHaveBeenCalledWith(join('/worktree', '.serena'), { recursive: true });
       expect(symlinkSpy).toHaveBeenCalledWith(
         join('/repo', '.serena/cache'),
-        join('/worktree', '.serena/cache')
+        join('/worktree', '.serena/cache'),
+        'junction'
       );
     });
 
@@ -466,7 +475,8 @@ describe('worktree-link', () => {
       });
       expect(symlinkSpy).toHaveBeenCalledWith(
         join('/repo', '.serena/cache'),
-        join('/worktree', '.serena/cache')
+        join('/worktree', '.serena/cache'),
+        'junction'
       );
     });
 
@@ -515,6 +525,42 @@ describe('worktree-link', () => {
       });
 
       expect(result).toBe(false);
+    });
+
+    test('replaces real file/directory at destination (EINVAL)', async () => {
+      const einval = new Error('EINVAL') as NodeJS.ErrnoException;
+      einval.code = 'EINVAL';
+      readlinkSpy.mockRejectedValue(einval);
+
+      const result = await linkWorktreeFile('/repo', '/worktree', {
+        source: '.serena/cache',
+        destination: '.serena/cache',
+      });
+
+      expect(result).toBe(true);
+      expect(rmSpy).toHaveBeenCalledWith(join('/worktree', '.serena/cache'), {
+        recursive: true,
+        force: true,
+      });
+      expect(symlinkSpy).toHaveBeenCalledWith(
+        join('/repo', '.serena/cache'),
+        join('/worktree', '.serena/cache'),
+        'junction'
+      );
+    });
+
+    test('returns false when readlink throws unexpected error (EACCES)', async () => {
+      const eacces = new Error('EACCES') as NodeJS.ErrnoException;
+      eacces.code = 'EACCES';
+      readlinkSpy.mockRejectedValue(eacces);
+
+      const result = await linkWorktreeFile('/repo', '/worktree', {
+        source: '.serena/cache',
+        destination: '.serena/cache',
+      });
+
+      expect(result).toBe(false);
+      expect(symlinkSpy).not.toHaveBeenCalled();
     });
   });
 

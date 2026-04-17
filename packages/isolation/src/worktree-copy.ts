@@ -1,7 +1,7 @@
 /**
- * Worktree file copy utility
+ * Worktree file copy and link utility
  *
- * Copies git-ignored files from the canonical repo to a new worktree
+ * Copies or symlinks git-ignored files from the canonical repo to a new worktree
  * based on configuration in .archon/config.yaml
  */
 
@@ -188,16 +188,19 @@ export async function copyWorktreeFiles(
  */
 export function parseLinkFileEntry(entry: string): CopyFileEntry {
   const trimmed = entry.trim();
+
   if (!trimmed) {
     throw new Error('Link entry cannot be empty');
   }
+
   return { source: trimmed, destination: trimmed };
 }
 
 /**
  * Create a symlink in the worktree pointing to the source in the canonical repo.
  * Auto-creates the source directory if absent (so tools can write to it).
- * Idempotent: skips if symlink already points to the correct target.
+ * Idempotent: no-op if symlink already points to the correct target.
+ * Stale symlinks and real files/directories at the destination are replaced.
  *
  * @param sourceRoot - Canonical repo path
  * @param destRoot - Worktree path
@@ -233,6 +236,7 @@ export async function linkWorktreeFile(
   const sourcePath = join(sourceRoot, entry.source);
   const destPath = join(destRoot, entry.destination);
 
+  let phase = 'mkdir';
   try {
     // Auto-create source directory if absent (so tools can write to the shared location)
     await mkdir(sourcePath, { recursive: true });
@@ -241,6 +245,7 @@ export async function linkWorktreeFile(
     await mkdir(dirname(destPath), { recursive: true });
 
     // Idempotency: if symlink already points to the correct target, skip
+    phase = 'readlink';
     try {
       const existingTarget = await readlink(destPath);
       if (existingTarget === sourcePath) {
@@ -251,22 +256,27 @@ export async function linkWorktreeFile(
         return true;
       }
       // Wrong target — remove stale symlink and re-link
+      phase = 'rm-stale';
       await rm(destPath, { recursive: true, force: true });
     } catch (readlinkError) {
       const err = readlinkError as NodeJS.ErrnoException;
+      // ENOENT = path doesn't exist yet (expected, proceed to create)
+      // EINVAL = not a symlink — real file/dir exists at destPath (handle below)
+      // Any other error is unexpected: re-throw
       if (err.code !== 'ENOENT' && err.code !== 'EINVAL') {
-        // ENOENT = doesn't exist yet (expected); EINVAL = not a symlink (handle below)
         throw readlinkError;
       }
       if (err.code === 'EINVAL') {
         // A real file or directory exists at destPath — remove it and replace with symlink
         getLog().warn({ destination: entry.destination, destPath }, 'link_replacing_existing_path');
+        phase = 'rm-existing';
         await rm(destPath, { recursive: true, force: true });
       }
       // ENOENT: nothing there, proceed to create
     }
 
-    await symlink(sourcePath, destPath);
+    phase = 'symlink';
+    await symlink(sourcePath, destPath, 'junction');
 
     getLog().debug({ source: entry.source, destination: entry.destination }, 'file_linked');
     return true;
@@ -278,6 +288,7 @@ export async function linkWorktreeFile(
         destination: entry.destination,
         sourcePath,
         destPath,
+        phase,
         err,
         code: err.code ?? 'UNKNOWN',
       },
@@ -288,12 +299,13 @@ export async function linkWorktreeFile(
 }
 
 /**
- * Create symlinks for all configured link-files from canonical repo to worktree
+ * Create symlinks for all configured link-files from canonical repo to worktree.
+ * Invalid or empty entries are skipped (logged as errors) and do not abort the batch.
  *
  * @param canonicalRepoPath - Path to the main repository
  * @param worktreePath - Path to the new worktree
  * @param linkFiles - Array of file paths from config
- * @returns Array of successfully linked entries
+ * @returns Array of successfully linked entries (may be shorter than input on errors)
  */
 export async function linkWorktreeFiles(
   canonicalRepoPath: string,

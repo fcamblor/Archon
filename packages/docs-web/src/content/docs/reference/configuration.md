@@ -117,9 +117,13 @@ commands:
 # Worktree settings
 worktree:
   baseBranch: main  # Optional: auto-detected from git when not set
-  copyFiles:  # Optional: Additional files to copy to worktrees
+  copyFiles:  # Optional: Files/dirs to copy (duplicated) into each worktree
     - .env.example -> .env  # Rename during copy
     - .vscode               # Copy entire directory
+  linkFiles:  # Optional: Git-ignored dirs to symlink (not copy) into each worktree.
+              # Use for large tool caches to avoid duplicating data across worktrees.
+    - .serena/cache         # e.g. LSP caches
+    - .entire/metadata
   initSubmodules: true  # Optional: default true — auto-detects .gitmodules and runs
                         # `git submodule update --init --recursive`. Set false to opt out.
 
@@ -162,7 +166,7 @@ assistants:
 
 This is useful when you maintain coding style or identity preferences in `~/.claude/CLAUDE.md` and want Archon sessions to respect them.
 
-**Default behavior:** The `.archon/` directory is always copied to worktrees automatically (contains artifacts, plans, workflows). Use `copyFiles` only for additional files like `.env` or `.vscode`.
+**Default behavior:** The `.archon/` directory is always copied to worktrees automatically (contains artifacts, plans, workflows). Use `copyFiles` for additional files like `.env` or `.vscode`. Use `linkFiles` for large git-ignored tool caches (e.g., LSP index dirs) where copying would waste disk — each worktree gets an absolute symlink pointing to the shared directory in the canonical repo. The source directory is auto-created if absent.
 
 **Defaults behavior:** The app's bundled default commands and workflows are loaded at runtime and merged with repo-specific ones. Repo commands/workflows override app defaults by name. Set `defaults.loadDefaultCommands: false` or `defaults.loadDefaultWorkflows: false` to disable runtime loading.
 
