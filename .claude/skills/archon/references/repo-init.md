@@ -32,6 +32,8 @@ worktree:
   copyFiles:                      # Git-ignored files to copy into new worktrees
     - .env
     - .env.local
+  linkFiles:                      # Git-ignored dirs to symlink (not copy) — avoids duplicating
+    - .serena/cache               # large tool caches across worktrees
 
 # Control whether bundled defaults are loaded
 defaults:

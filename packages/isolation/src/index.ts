@@ -58,5 +58,8 @@ export {
   copyWorktreeFile,
   parseCopyFileEntry,
   isPathWithinRoot,
+  linkWorktreeFiles,
+  linkWorktreeFile,
+  parseLinkFileEntry,
 } from './worktree-copy';
 export type { CopyFileEntry } from './worktree-copy';

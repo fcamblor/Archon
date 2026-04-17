@@ -8,6 +8,9 @@ import {
   copyWorktreeFile,
   copyWorktreeFiles,
   isPathWithinRoot,
+  parseLinkFileEntry,
+  linkWorktreeFile,
+  linkWorktreeFiles,
   type CopyFileEntry,
 } from '@archon/isolation';
 
@@ -363,6 +366,275 @@ describe('worktree-copy', () => {
       expect(result).toHaveLength(2);
       expect(result[0]).toEqual({ source: '.env', destination: '.env' });
       expect(result[1]).toEqual({ source: 'data/config.json', destination: 'data/config.json' });
+    });
+  });
+});
+
+describe('worktree-link', () => {
+  describe('parseLinkFileEntry', () => {
+    test('parses simple path', () => {
+      const result = parseLinkFileEntry('.serena/cache');
+      expect(result).toEqual({ source: '.serena/cache', destination: '.serena/cache' });
+    });
+
+    test('trims whitespace', () => {
+      const result = parseLinkFileEntry('  .serena/cache  ');
+      expect(result).toEqual({ source: '.serena/cache', destination: '.serena/cache' });
+    });
+
+    test('handles directory paths', () => {
+      const result = parseLinkFileEntry('.entire/metadata/');
+      expect(result).toEqual({ source: '.entire/metadata/', destination: '.entire/metadata/' });
+    });
+
+    test('treats arrow literally (no rename syntax)', () => {
+      const result = parseLinkFileEntry('.env.example -> .env');
+      expect(result).toEqual({
+        source: '.env.example -> .env',
+        destination: '.env.example -> .env',
+      });
+    });
+
+    test('throws on empty string', () => {
+      expect(() => parseLinkFileEntry('')).toThrow('Link entry cannot be empty');
+    });
+
+    test('throws on whitespace-only string', () => {
+      expect(() => parseLinkFileEntry('   ')).toThrow('Link entry cannot be empty');
+    });
+  });
+
+  describe('linkWorktreeFile', () => {
+    let mkdirSpy: Mock<typeof fs.mkdir>;
+    let symlinkSpy: Mock<typeof fs.symlink>;
+    let readlinkSpy: Mock<typeof fs.readlink>;
+    let rmSpy: Mock<typeof fs.rm>;
+
+    beforeEach(() => {
+      mkdirSpy = spyOn(fs, 'mkdir');
+      symlinkSpy = spyOn(fs, 'symlink');
+      readlinkSpy = spyOn(fs, 'readlink');
+      rmSpy = spyOn(fs, 'rm');
+
+      mkdirSpy.mockResolvedValue(undefined);
+      symlinkSpy.mockResolvedValue(undefined);
+      rmSpy.mockResolvedValue(undefined);
+    });
+
+    afterEach(() => {
+      mkdirSpy.mockRestore();
+      symlinkSpy.mockRestore();
+      readlinkSpy.mockRestore();
+      rmSpy.mockRestore();
+    });
+
+    test('creates symlink successfully', async () => {
+      const enoent = new Error('ENOENT') as NodeJS.ErrnoException;
+      enoent.code = 'ENOENT';
+      readlinkSpy.mockRejectedValue(enoent);
+
+      const result = await linkWorktreeFile('/repo', '/worktree', {
+        source: '.serena/cache',
+        destination: '.serena/cache',
+      });
+
+      expect(result).toBe(true);
+      expect(mkdirSpy).toHaveBeenCalledWith(join('/repo', '.serena/cache'), { recursive: true });
+      expect(mkdirSpy).toHaveBeenCalledWith(join('/worktree', '.serena'), { recursive: true });
+      expect(symlinkSpy).toHaveBeenCalledWith(
+        join('/repo', '.serena/cache'),
+        join('/worktree', '.serena/cache'),
+        'junction'
+      );
+    });
+
+    test('skips when symlink already points to correct target', async () => {
+      readlinkSpy.mockResolvedValue(join('/repo', '.serena/cache'));
+
+      const result = await linkWorktreeFile('/repo', '/worktree', {
+        source: '.serena/cache',
+        destination: '.serena/cache',
+      });
+
+      expect(result).toBe(true);
+      expect(symlinkSpy).not.toHaveBeenCalled();
+    });
+
+    test('replaces stale symlink with wrong target', async () => {
+      readlinkSpy.mockResolvedValue('/old/path/.serena/cache');
+
+      const result = await linkWorktreeFile('/repo', '/worktree', {
+        source: '.serena/cache',
+        destination: '.serena/cache',
+      });
+
+      expect(result).toBe(true);
+      expect(rmSpy).toHaveBeenCalledWith(join('/worktree', '.serena/cache'), {
+        recursive: true,
+        force: true,
+      });
+      expect(symlinkSpy).toHaveBeenCalledWith(
+        join('/repo', '.serena/cache'),
+        join('/worktree', '.serena/cache'),
+        'junction'
+      );
+    });
+
+    test('blocks source path traversal', async () => {
+      const result = await linkWorktreeFile('/repo', '/worktree', {
+        source: '../../../etc/passwd',
+        destination: 'stolen.txt',
+      });
+
+      expect(result).toBe(false);
+      expect(symlinkSpy).not.toHaveBeenCalled();
+    });
+
+    test('blocks destination path traversal', async () => {
+      const result = await linkWorktreeFile('/repo', '/worktree', {
+        source: '.serena/cache',
+        destination: '../../../tmp/evil',
+      });
+
+      expect(result).toBe(false);
+      expect(symlinkSpy).not.toHaveBeenCalled();
+    });
+
+    test('auto-creates source directory', async () => {
+      const enoent = new Error('ENOENT') as NodeJS.ErrnoException;
+      enoent.code = 'ENOENT';
+      readlinkSpy.mockRejectedValue(enoent);
+
+      await linkWorktreeFile('/repo', '/worktree', {
+        source: '.serena/cache',
+        destination: '.serena/cache',
+      });
+
+      expect(mkdirSpy).toHaveBeenCalledWith(join('/repo', '.serena/cache'), { recursive: true });
+    });
+
+    test('returns false when symlink throws', async () => {
+      const enoent = new Error('ENOENT') as NodeJS.ErrnoException;
+      enoent.code = 'ENOENT';
+      readlinkSpy.mockRejectedValue(enoent);
+      symlinkSpy.mockRejectedValue(new Error('Permission denied'));
+
+      const result = await linkWorktreeFile('/repo', '/worktree', {
+        source: '.serena/cache',
+        destination: '.serena/cache',
+      });
+
+      expect(result).toBe(false);
+    });
+
+    test('replaces real file/directory at destination (EINVAL)', async () => {
+      const einval = new Error('EINVAL') as NodeJS.ErrnoException;
+      einval.code = 'EINVAL';
+      readlinkSpy.mockRejectedValue(einval);
+
+      const result = await linkWorktreeFile('/repo', '/worktree', {
+        source: '.serena/cache',
+        destination: '.serena/cache',
+      });
+
+      expect(result).toBe(true);
+      expect(rmSpy).toHaveBeenCalledWith(join('/worktree', '.serena/cache'), {
+        recursive: true,
+        force: true,
+      });
+      expect(symlinkSpy).toHaveBeenCalledWith(
+        join('/repo', '.serena/cache'),
+        join('/worktree', '.serena/cache'),
+        'junction'
+      );
+    });
+
+    test('returns false when readlink throws unexpected error (EACCES)', async () => {
+      const eacces = new Error('EACCES') as NodeJS.ErrnoException;
+      eacces.code = 'EACCES';
+      readlinkSpy.mockRejectedValue(eacces);
+
+      const result = await linkWorktreeFile('/repo', '/worktree', {
+        source: '.serena/cache',
+        destination: '.serena/cache',
+      });
+
+      expect(result).toBe(false);
+      expect(symlinkSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('linkWorktreeFiles', () => {
+    let mkdirSpy: Mock<typeof fs.mkdir>;
+    let symlinkSpy: Mock<typeof fs.symlink>;
+    let readlinkSpy: Mock<typeof fs.readlink>;
+    let rmSpy: Mock<typeof fs.rm>;
+
+    beforeEach(() => {
+      mkdirSpy = spyOn(fs, 'mkdir');
+      symlinkSpy = spyOn(fs, 'symlink');
+      readlinkSpy = spyOn(fs, 'readlink');
+      rmSpy = spyOn(fs, 'rm');
+
+      mkdirSpy.mockResolvedValue(undefined);
+      symlinkSpy.mockResolvedValue(undefined);
+      rmSpy.mockResolvedValue(undefined);
+    });
+
+    afterEach(() => {
+      mkdirSpy.mockRestore();
+      symlinkSpy.mockRestore();
+      readlinkSpy.mockRestore();
+      rmSpy.mockRestore();
+    });
+
+    test('links multiple entries successfully', async () => {
+      const enoent = new Error('ENOENT') as NodeJS.ErrnoException;
+      enoent.code = 'ENOENT';
+      readlinkSpy.mockRejectedValue(enoent);
+
+      const result = await linkWorktreeFiles('/repo', '/worktree', [
+        '.serena/cache',
+        '.entire/metadata',
+      ]);
+
+      expect(result).toHaveLength(2);
+      expect(result[0]).toEqual({ source: '.serena/cache', destination: '.serena/cache' });
+      expect(result[1]).toEqual({ source: '.entire/metadata', destination: '.entire/metadata' });
+    });
+
+    test('returns only successful entries on partial failure', async () => {
+      const enoent = new Error('ENOENT') as NodeJS.ErrnoException;
+      enoent.code = 'ENOENT';
+      readlinkSpy.mockRejectedValue(enoent);
+
+      // First succeeds, second fails
+      symlinkSpy
+        .mockResolvedValueOnce(undefined)
+        .mockRejectedValueOnce(new Error('Permission denied'));
+
+      const result = await linkWorktreeFiles('/repo', '/worktree', [
+        '.serena/cache',
+        '.entire/metadata',
+      ]);
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toEqual({ source: '.serena/cache', destination: '.serena/cache' });
+    });
+
+    test('skips invalid entries gracefully', async () => {
+      const enoent = new Error('ENOENT') as NodeJS.ErrnoException;
+      enoent.code = 'ENOENT';
+      readlinkSpy.mockRejectedValue(enoent);
+
+      const result = await linkWorktreeFiles('/repo', '/worktree', [
+        '', // Invalid - empty
+        '.serena/cache', // Valid
+        '   ', // Invalid - whitespace only
+      ]);
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toEqual({ source: '.serena/cache', destination: '.serena/cache' });
     });
   });
 });
