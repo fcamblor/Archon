@@ -201,6 +201,7 @@ function makeApp(): { app: OpenAPIHono; mockWebAdapter: WebAdapter } {
       await fn();
       return { status: 'started' };
     }),
+    getAbortSignal: mock((_id: string) => undefined),
     getStats: mock(() => ({ active: 0, queued: 0 })),
   } as unknown as ConversationLockManager;
   registerApiRoutes(app, mockWebAdapter, mockLockManager);

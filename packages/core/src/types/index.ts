@@ -51,6 +51,8 @@ export interface HandleMessageContext {
   readonly parentConversationId?: string;
   readonly isolationHints?: IsolationHints;
   readonly attachedFiles?: AttachedFile[];
+  /** AbortSignal for cancelling the in-flight AI request (web UI "Stop generating"). */
+  readonly abortSignal?: AbortSignal;
 }
 
 export interface Codebase {

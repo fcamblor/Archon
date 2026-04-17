@@ -37,6 +37,7 @@ export interface LockAcquisitionResult {
 export class ConversationLockManager {
   private activeConversations: Map<string, Promise<void>>;
   private messageQueues: Map<string, QueuedMessage[]>;
+  private abortControllers: Map<string, AbortController>;
   private maxConcurrent: number;
 
   /**
@@ -46,8 +47,34 @@ export class ConversationLockManager {
   constructor(maxConcurrent = 10) {
     this.activeConversations = new Map<string, Promise<void>>();
     this.messageQueues = new Map<string, QueuedMessage[]>();
+    this.abortControllers = new Map<string, AbortController>();
     this.maxConcurrent = maxConcurrent;
     getLog().info({ maxConcurrent }, 'initialized');
+  }
+
+  /**
+   * Get the AbortSignal for a conversation's active handler.
+   * Returns undefined if the conversation is not currently active.
+   */
+  getAbortSignal(conversationId: string): AbortSignal | undefined {
+    return this.abortControllers.get(conversationId)?.signal;
+  }
+
+  /**
+   * Cancel the active handler for a conversation by aborting its AbortController.
+   * Returns true if cancellation was triggered, false if conversation was not active or was already cancelled.
+   */
+  cancel(conversationId: string): boolean {
+    const controller = this.abortControllers.get(conversationId);
+    if (!controller) {
+      return false;
+    }
+    if (controller.signal.aborted) {
+      return false;
+    }
+    getLog().info({ conversationId }, 'conversation.cancel_requested');
+    controller.abort();
+    return true;
   }
 
   /**
@@ -79,14 +106,19 @@ export class ConversationLockManager {
       'conversation_started'
     );
 
+    // Create an AbortController for this conversation so it can be cancelled
+    const abortController = new AbortController();
+    this.abortControllers.set(conversationId, abortController);
+
     // Store Promise in Map BEFORE awaiting (prevents race conditions)
     const promise = handler()
       .catch(error => {
         getLog().error({ err: error, conversationId }, 'conversation_handler_error');
       })
       .finally(() => {
-        // Clean up active conversation
+        // Clean up active conversation and abort controller
         this.activeConversations.delete(conversationId);
+        this.abortControllers.delete(conversationId);
         getLog().debug(
           { conversationId, active: this.activeConversations.size, queued: this.getQueuedCount() },
           'conversation_completed'

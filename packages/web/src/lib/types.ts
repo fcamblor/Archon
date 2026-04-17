@@ -166,6 +166,12 @@ export interface SystemStatusEvent extends BaseSSEEvent {
   content: string;
 }
 
+// Conversation cancelled (user clicked "Stop generating")
+export interface ConversationCancelledEvent extends BaseSSEEvent {
+  type: 'conversation_cancelled';
+  conversationId: string;
+}
+
 /**
  * Discriminated union of all SSE event types emitted by the Web adapter.
  * Parsed from JSON with no runtime validation — the server is trusted.
@@ -187,7 +193,8 @@ export type SSEEvent =
   | WorkflowDispatchEvent
   | WorkflowOutputPreviewEvent
   | RetractEvent
-  | SystemStatusEvent;
+  | SystemStatusEvent
+  | ConversationCancelledEvent;
 
 // UI State types
 

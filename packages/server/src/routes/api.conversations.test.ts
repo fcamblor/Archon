@@ -310,6 +310,7 @@ describe('POST /api/conversations with message (atomic create+send)', () => {
       await fn();
       return { status: 'started' as const };
     }),
+    getAbortSignal: mock((_id: string) => undefined),
   } as unknown as ConversationLockManager;
 
   const mockWebAdapter = {
@@ -402,6 +403,94 @@ describe('POST /api/conversations with message (atomic create+send)', () => {
     expect(body.conversationId).toBe('web-test-abc');
     expect(body.id).toBe('internal-uuid-123');
     expect(body.dispatched).toBeUndefined();
+  });
+});
+
+describe('POST /api/conversations/:id/cancel', () => {
+  const mockEmitSSE = mock(async (_convId: string, _data: string) => {});
+
+  const mockWebAdapterWithSSE = {
+    setConversationDbId: mock((_platformId: string, _dbId: string) => {}),
+    emitLockEvent: mock((_convId: string, _locked: boolean) => {}),
+    emitSSE: mockEmitSSE,
+  } as unknown as WebAdapter;
+
+  test('returns 200 and emits SSE event when conversation is active', async () => {
+    const mockLockManager = {
+      acquireLock: mock(async (_convId: string, fn: () => Promise<void>) => {
+        await fn();
+        return { status: 'started' as const };
+      }),
+      getAbortSignal: mock((_id: string) => undefined),
+      cancel: mock((_id: string) => true),
+    } as unknown as ConversationLockManager;
+
+    const app = new OpenAPIHono();
+    registerApiRoutes(app, mockWebAdapterWithSSE, mockLockManager);
+
+    const response = await app.request('/api/conversations/web-test-abc/cancel', {
+      method: 'POST',
+    });
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { success: boolean };
+    expect(body.success).toBe(true);
+    expect(mockEmitSSE).toHaveBeenCalledWith(
+      'web-test-abc',
+      expect.stringContaining('"type":"conversation_cancelled"')
+    );
+  });
+
+  test('returns 404 when no active conversation', async () => {
+    mockEmitSSE.mockClear();
+    const mockLockManager = {
+      acquireLock: mock(async (_convId: string, fn: () => Promise<void>) => {
+        await fn();
+        return { status: 'started' as const };
+      }),
+      getAbortSignal: mock((_id: string) => undefined),
+      cancel: mock((_id: string) => false),
+    } as unknown as ConversationLockManager;
+
+    const app = new OpenAPIHono();
+    registerApiRoutes(app, mockWebAdapterWithSSE, mockLockManager);
+
+    const response = await app.request('/api/conversations/web-test-abc/cancel', {
+      method: 'POST',
+    });
+    expect(response.status).toBe(404);
+    const body = (await response.json()) as { error: string };
+    expect(body.error).toContain('No active processing');
+    // SSE must NOT be emitted for a false cancel
+    expect(mockEmitSSE).not.toHaveBeenCalled();
+  });
+
+  test('returns 200 even when emitSSE throws (best-effort SSE)', async () => {
+    const mockLockManager = {
+      acquireLock: mock(async (_convId: string, fn: () => Promise<void>) => {
+        await fn();
+        return { status: 'started' as const };
+      }),
+      getAbortSignal: mock((_id: string) => undefined),
+      cancel: mock((_id: string) => true),
+    } as unknown as ConversationLockManager;
+
+    const throwingWebAdapter = {
+      ...mockWebAdapterWithSSE,
+      emitSSE: mock(async () => {
+        throw new Error('SSE transport failed');
+      }),
+    } as unknown as WebAdapter;
+
+    const app = new OpenAPIHono({ defaultHook: validationErrorHook });
+    registerApiRoutes(app, throwingWebAdapter, mockLockManager);
+
+    const response = await app.request('/api/conversations/web-test-abc/cancel', {
+      method: 'POST',
+    });
+    // Cancellation succeeded even though SSE failed — best-effort
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { success: boolean };
+    expect(body.success).toBe(true);
   });
 });
 

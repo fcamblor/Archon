@@ -518,8 +518,14 @@ export async function handleMessage(
   message: string,
   context?: HandleMessageContext
 ): Promise<void> {
-  const { issueContext, threadContext, parentConversationId, isolationHints, attachedFiles } =
-    context ?? {};
+  const {
+    issueContext,
+    threadContext,
+    parentConversationId,
+    isolationHints,
+    attachedFiles,
+    abortSignal,
+  } = context ?? {};
   try {
     getLog().debug({ conversationId }, 'orchestrator_message_received');
 
@@ -843,6 +849,7 @@ export async function handleMessage(
     const requestOptions: SendQueryOptions = {
       assistantConfig: config.assistants[providerKey] ?? {},
       env: Object.keys(effectiveEnv).length > 0 ? effectiveEnv : undefined,
+      ...(abortSignal ? { abortSignal } : {}),
     };
 
     const mode = platform.getStreamingMode();
@@ -883,6 +890,11 @@ export async function handleMessage(
     getLog().debug({ conversationId }, 'orchestrator_message_completed');
   } catch (error) {
     const err = toError(error);
+    // Intentional cancellation — do not surface as an error
+    if (err.name === 'AbortError' || err.message === 'Query aborted') {
+      getLog().info({ conversationId }, 'orchestrator_message_aborted');
+      return;
+    }
     getLog().error({ err, conversationId }, 'orchestrator_message_failed');
     const userMessage = classifyAndFormatError(err);
     try {

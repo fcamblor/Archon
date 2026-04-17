@@ -116,7 +116,11 @@ describe('GET /api/workflows', () => {
     expect(body.workflows[0]?.workflow.name).toBe('deploy');
     expect(body.workflows[0]?.source).toBe('bundled');
     expect(body.workflows.workflows).toBeUndefined();
-    expect(mockDiscoverWorkflows).toHaveBeenCalledWith('/tmp/project', expect.any(Function));
+    expect(mockDiscoverWorkflows).toHaveBeenCalledWith(
+      '/tmp/project',
+      expect.any(Function),
+      expect.objectContaining({ globalSearchPath: expect.any(String) })
+    );
     expect(body.errors).toBeDefined();
     expect(Array.isArray(body.errors)).toBe(true);
   });
@@ -469,6 +473,30 @@ describe('DELETE /api/workflows/:name', () => {
       expect(body.name).toBe('to-delete');
     } finally {
       await rm(testDir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('GET /api/workflows - globalSearchPath', () => {
+  test('passes globalSearchPath from getArchonHome() to discoverWorkflowsWithConfig', async () => {
+    const fakeHome = `/tmp/archon-home-${Date.now()}`;
+    process.env.ARCHON_HOME = fakeHome;
+
+    try {
+      const app = createTestApp();
+      registerApiRoutes(app, {} as WebAdapter, {} as ConversationLockManager);
+
+      mockDiscoverWorkflows.mockClear();
+      const response = await app.request('/api/workflows?cwd=/tmp/project');
+      expect(response.status).toBe(200);
+
+      expect(mockDiscoverWorkflows).toHaveBeenCalledWith(
+        '/tmp/project',
+        expect.any(Function),
+        expect.objectContaining({ globalSearchPath: fakeHome })
+      );
+    } finally {
+      delete process.env.ARCHON_HOME;
     }
   });
 });

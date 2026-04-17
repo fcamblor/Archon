@@ -8,7 +8,7 @@ import {
   type DragEvent,
   type ClipboardEvent,
 } from 'react';
-import { ArrowUp, Loader2, Paperclip, X } from 'lucide-react';
+import { ArrowUp, Loader2, Paperclip, Square, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 /** Binary (non-text) MIME types explicitly accepted */
@@ -107,6 +107,8 @@ const MAX_FILES = 5;
 
 interface MessageInputProps {
   onSend: (message: string, files?: File[]) => void;
+  onCancel?: () => void;
+  isProcessing?: boolean;
   disabled: boolean;
   disabledReason?: string;
 }
@@ -122,7 +124,7 @@ function formatBytes(bytes: number): string {
 }
 
 const messageInput = forwardRef<MessageInputHandle, MessageInputProps>(function MessageInputInner(
-  { onSend, disabled, disabledReason }: MessageInputProps,
+  { onSend, onCancel, isProcessing, disabled, disabledReason }: MessageInputProps,
   ref
 ): React.ReactElement {
   const [value, setValue] = useState('');
@@ -317,18 +319,29 @@ const messageInput = forwardRef<MessageInputHandle, MessageInputProps>(function 
             className="flex-1 resize-none overflow-hidden rounded-lg border border-border bg-background px-4 py-2 text-sm leading-6 text-text-primary placeholder:text-text-tertiary focus:border-primary focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
             style={{ minHeight: '40px', maxHeight: '200px' }}
           />
-          <Button
-            onClick={handleSend}
-            disabled={disabled || !value.trim()}
-            size="icon"
-            className="h-10 w-10 shrink-0 rounded-lg bg-primary text-primary-foreground hover:bg-accent-hover disabled:opacity-50"
-          >
-            {disabled && !disabledReason ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <ArrowUp className="h-4 w-4" />
-            )}
-          </Button>
+          {isProcessing && onCancel ? (
+            <Button
+              onClick={onCancel}
+              size="icon"
+              className="h-10 w-10 shrink-0 rounded-lg bg-destructive text-destructive-foreground hover:bg-destructive/80"
+              title="Stop generating"
+            >
+              <Square className="h-4 w-4" />
+            </Button>
+          ) : (
+            <Button
+              onClick={handleSend}
+              disabled={disabled || !value.trim()}
+              size="icon"
+              className="h-10 w-10 shrink-0 rounded-lg bg-primary text-primary-foreground hover:bg-accent-hover disabled:opacity-50"
+            >
+              {disabled && !disabledReason ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <ArrowUp className="h-4 w-4" />
+              )}
+            </Button>
+          )}
         </div>
       </div>
     </div>
