@@ -22,6 +22,23 @@ export interface CopyFileEntry {
 }
 
 /**
+ * Parse a file entry string from config into a `CopyFileEntry`.
+ * Source and destination are always the same trimmed path.
+ *
+ * @param entry - Config entry like ".env" or ".serena/cache"
+ * @param label - Human-readable label used in the error message (e.g. "Copy" or "Link")
+ * @returns Parsed source and destination (always identical)
+ * @throws Error if entry is empty
+ */
+function parseFileEntry(entry: string, label: string): CopyFileEntry {
+  const trimmed = entry.trim();
+  if (!trimmed) {
+    throw new Error(`${label} entry cannot be empty`);
+  }
+  return { source: trimmed, destination: trimmed };
+}
+
+/**
  * Parse a copy file entry from config.
  * Each entry is a path to a git-ignored file or directory to copy into worktrees.
  *
@@ -30,13 +47,7 @@ export interface CopyFileEntry {
  * @throws Error if entry is empty
  */
 export function parseCopyFileEntry(entry: string): CopyFileEntry {
-  const trimmed = entry.trim();
-
-  if (!trimmed) {
-    throw new Error('Copy entry cannot be empty');
-  }
-
-  return { source: trimmed, destination: trimmed };
+  return parseFileEntry(entry, 'Copy');
 }
 
 /**
@@ -48,19 +59,35 @@ export function parseCopyFileEntry(entry: string): CopyFileEntry {
  * @returns true if path stays within root, false if it escapes
  */
 export function isPathWithinRoot(root: string, filePath: string): boolean {
-  // Join and normalize to resolve any ../ segments
-  const fullPath = normalize(join(root, filePath));
-  const normalizedRoot = normalize(root);
-
-  // Get relative path from root to fullPath
-  const relativePath = relative(normalizedRoot, fullPath);
-
+  const relativePath = relative(normalize(root), normalize(join(root, filePath)));
   // If relative path starts with '..' or is absolute, it escapes the root
   // On Windows, cross-drive paths will be absolute (e.g., "D:\other")
-  if (relativePath.startsWith('..') || isAbsolute(relativePath)) {
+  return !relativePath.startsWith('..') && !isAbsolute(relativePath);
+}
+
+/**
+ * Validate that the entry's source and destination paths don't escape their roots.
+ * Logs an error and returns false if either path escapes; returns true if both are safe.
+ */
+function validateEntryPaths(sourceRoot: string, destRoot: string, entry: CopyFileEntry): boolean {
+  if (!isPathWithinRoot(sourceRoot, entry.source)) {
+    getLog().error(
+      { source: entry.source, sourceRoot, reason: 'Source path escapes repository root' },
+      'path_traversal_blocked'
+    );
     return false;
   }
-
+  if (!isPathWithinRoot(destRoot, entry.destination)) {
+    getLog().error(
+      {
+        destination: entry.destination,
+        destRoot,
+        reason: 'Destination path escapes worktree root',
+      },
+      'path_traversal_blocked'
+    );
+    return false;
+  }
   return true;
 }
 
@@ -80,24 +107,7 @@ export async function copyWorktreeFile(
   destRoot: string,
   entry: CopyFileEntry
 ): Promise<boolean> {
-  // Security: Validate paths don't escape their roots (prevents path traversal)
-  if (!isPathWithinRoot(sourceRoot, entry.source)) {
-    getLog().error(
-      { source: entry.source, sourceRoot, reason: 'Source path escapes repository root' },
-      'path_traversal_blocked'
-    );
-    return false;
-  }
-
-  if (!isPathWithinRoot(destRoot, entry.destination)) {
-    getLog().error(
-      {
-        destination: entry.destination,
-        destRoot,
-        reason: 'Destination path escapes worktree root',
-      },
-      'path_traversal_blocked'
-    );
+  if (!validateEntryPaths(sourceRoot, destRoot, entry)) {
     return false;
   }
 
@@ -187,13 +197,7 @@ export async function copyWorktreeFiles(
  * @throws Error if entry is empty
  */
 export function parseLinkFileEntry(entry: string): CopyFileEntry {
-  const trimmed = entry.trim();
-
-  if (!trimmed) {
-    throw new Error('Link entry cannot be empty');
-  }
-
-  return { source: trimmed, destination: trimmed };
+  return parseFileEntry(entry, 'Link');
 }
 
 /**
@@ -212,24 +216,7 @@ export async function linkWorktreeFile(
   destRoot: string,
   entry: CopyFileEntry
 ): Promise<boolean> {
-  // Security: Validate paths don't escape their roots (prevents path traversal)
-  if (!isPathWithinRoot(sourceRoot, entry.source)) {
-    getLog().error(
-      { source: entry.source, sourceRoot, reason: 'Source path escapes repository root' },
-      'path_traversal_blocked'
-    );
-    return false;
-  }
-
-  if (!isPathWithinRoot(destRoot, entry.destination)) {
-    getLog().error(
-      {
-        destination: entry.destination,
-        destRoot,
-        reason: 'Destination path escapes worktree root',
-      },
-      'path_traversal_blocked'
-    );
+  if (!validateEntryPaths(sourceRoot, destRoot, entry)) {
     return false;
   }
 
