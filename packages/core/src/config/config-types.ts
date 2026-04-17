@@ -166,6 +166,15 @@ export interface RepoConfig {
     copyFiles?: string[];
 
     /**
+     * Git-ignored files/directories to symlink from main repo into new worktrees.
+     * Creates absolute symlinks in the worktree pointing to the canonical repo paths.
+     * Source directories are auto-created if absent. Prefer this over copyFiles
+     * for large tool caches to avoid duplicating data across worktrees.
+     * @example [".serena/cache", ".entire/metadata"]
+     */
+    linkFiles?: string[];
+
+    /**
      * Initialize git submodules in new worktrees.
      * Runs `git submodule update --init --recursive` after worktree creation
      * when the repo contains a `.gitmodules` file. Repos without submodules

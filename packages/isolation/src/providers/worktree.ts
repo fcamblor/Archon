@@ -28,7 +28,7 @@ import {
 } from '@archon/git';
 import { getArchonWorkspacesPath } from '@archon/paths';
 import type { RepoPath, WorktreeInfo } from '@archon/git';
-import { copyWorktreeFiles } from '../worktree-copy';
+import { copyWorktreeFiles, linkWorktreeFiles } from '../worktree-copy';
 import type {
   DestroyResult,
   IIsolationProvider,
@@ -750,21 +750,24 @@ export class WorktreeProvider implements IIsolationProvider {
   private async copyConfiguredFiles(
     canonicalRepoPath: string,
     worktreePath: string,
-    worktreeConfig?: { baseBranch?: string; copyFiles?: string[] } | null
+    worktreeConfig?: { baseBranch?: string; copyFiles?: string[]; linkFiles?: string[] } | null
   ): Promise<{ configLoadFailed: boolean }> {
     // Default files to always copy
     const defaultCopyFiles = ['.archon'];
 
     // Load user config - log errors and set configLoadFailed, but don't fail worktree creation
     let userCopyFiles: string[] = [];
+    let userLinkFiles: string[] = [];
     let configLoadFailed = false;
     if (worktreeConfig) {
       userCopyFiles = worktreeConfig.copyFiles ?? [];
+      userLinkFiles = worktreeConfig.linkFiles ?? [];
     } else {
       // Config not provided - try loading it
       try {
         const loadedConfig = await this.loadConfig(canonicalRepoPath);
         userCopyFiles = loadedConfig?.copyFiles ?? [];
+        userLinkFiles = loadedConfig?.linkFiles ?? [];
       } catch (error) {
         // Config errors are more serious - log as error, not warning
         const err = error instanceof Error ? error : new Error(String(error));
@@ -780,7 +783,7 @@ export class WorktreeProvider implements IIsolationProvider {
     // Merge defaults with user config (Set deduplicates)
     const copyFiles = [...new Set([...defaultCopyFiles, ...userCopyFiles])];
 
-    if (copyFiles.length === 0) {
+    if (copyFiles.length === 0 && userLinkFiles.length === 0) {
       return { configLoadFailed };
     }
 
@@ -802,6 +805,26 @@ export class WorktreeProvider implements IIsolationProvider {
       // Should not happen as copyWorktreeFiles handles errors internally,
       // but guard against unexpected errors
       getLog().error({ err: error, worktreePath }, 'worktree_file_copy_failed');
+    }
+
+    // Link configured files (symlinks, not copies)
+    if (userLinkFiles.length > 0) {
+      try {
+        const linked = await linkWorktreeFiles(canonicalRepoPath, worktreePath, userLinkFiles);
+        if (linked.length > 0) {
+          getLog().debug({ worktreePath, linkedCount: linked.length }, 'worktree_files_linked');
+        }
+        const attemptedLinkCount = userLinkFiles.length;
+        const linkedCount = linked.length;
+        if (linkedCount < attemptedLinkCount) {
+          getLog().warn(
+            { worktreePath, linkedCount, attemptedLinkCount },
+            'worktree_file_link_partial'
+          );
+        }
+      } catch (error) {
+        getLog().error({ err: error, worktreePath }, 'worktree_file_link_failed');
+      }
     }
 
     return { configLoadFailed };

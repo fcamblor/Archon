@@ -243,6 +243,14 @@ export interface WorktreeCreateConfig {
   baseBranch?: string;
   copyFiles?: string[];
   /**
+   * Git-ignored files/directories to symlink from main repo into new worktrees.
+   * Creates an absolute symlink in the worktree pointing to the canonical repo path.
+   * Source directories are auto-created if absent. Use for large tool caches
+   * (e.g., LSP caches) where copying would waste disk space.
+   * @example [".serena/cache", ".entire/metadata"]
+   */
+  linkFiles?: string[];
+  /**
    * Initialize git submodules in the worktree. Defaults to enabled — a worktree
    * with uninitialized submodules is a silent broken state for monorepos.
    * Set to `false` to opt out. No-op when `.gitmodules` is absent.
